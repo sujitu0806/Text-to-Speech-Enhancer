@@ -1,0 +1,74 @@
+[
+  {
+    "text": "hey! my name is sujti and i am the best",
+    "timestamp": "1:27 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "hi",
+    "timestamp": "1:10 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "how is it going?",
+    "timestamp": "1:10 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "hi!",
+    "timestamp": "1:17 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "how are you doing?",
+    "timestamp": "1:17 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "sup",
+    "timestamp": "1:18 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "gang gang",
+    "timestamp": "1:18 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "hey! my name is sujti and i am the best",
+    "timestamp": "1:27 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "bro",
+    "timestamp": "1:21 AM, 4/15/2026",
+    "direction": "incoming",
+    "senderLabel": "Michael Li"
+  },
+  {
+    "text": "hi",
+    "timestamp": "1:21 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  },
+  {
+    "text": "shit failed",
+    "timestamp": "1:21 AM, 4/15/2026",
+    "direction": "incoming",
+    "senderLabel": "Michael Li"
+  },
+  {
+    "text": "hola",
+    "timestamp": "1:21 AM, 4/15/2026",
+    "direction": "outgoing",
+    "senderLabel": "Sujit Uppuluri"
+  }
+]
