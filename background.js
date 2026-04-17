@@ -1,14 +1,16 @@
 /**
- * Service worker: persist captured messages and write the latest full JSON to disk
- * via chrome.downloads (fixed path, overwrite). Browsers do not allow true
- * append-to-file from extensions; overwriting one file per update is the standard approach.
+ * Service worker: persist messages for the current chat session in chrome.storage.local.
+ * JSON is written to disk only when the user triggers WA_EXPORT (Export button).
  */
 
 const STORAGE_KEY = 'waCollectedMessages';
-const DOWNLOAD_RELATIVE_PATH = 'WhatsAppExtractor/whatsapp-messages.json';
-const DEBOUNCE_MS = 300;
+/**
+ * Fallback when the local relay is not running: path under Chrome’s download directory only.
+ */
+const DOWNLOAD_RELATIVE_PATH = 'Scraping Tests/whatsapp-messages.json';
 
-let downloadTimer = null;
+/** If `node scripts/whatsapp-export-relay.mjs` is running, exports go to the repo’s Scraping Tests folder. */
+const LOCAL_EXPORT_RELAY_URL = 'http://127.0.0.1:17395/';
 
 function log(...args) {
   console.log('[WA Extractor background]', ...args);
@@ -32,6 +34,19 @@ function messageKey(p) {
   return `h:${ts}|${d}|${t}`;
 }
 
+async function tryWriteViaLocalRelay(json) {
+  try {
+    const res = await fetch(LOCAL_EXPORT_RELAY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json;charset=utf-8' },
+      body: json,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function downloadJsonFile(messages) {
   const json = JSON.stringify(messages, null, 2);
   const url = `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
@@ -42,19 +57,10 @@ async function downloadJsonFile(messages) {
       conflictAction: 'overwrite',
       saveAs: false,
     });
-    log('Saved', messages.length, 'message(s) to', DOWNLOAD_RELATIVE_PATH);
+    log('Saved', messages.length, 'message(s) under download dir →', DOWNLOAD_RELATIVE_PATH);
   } catch (e) {
     console.error('[WA Extractor background] download failed:', e);
   }
-}
-
-function scheduleDownloadFromStorage() {
-  clearTimeout(downloadTimer);
-  downloadTimer = setTimeout(async () => {
-    downloadTimer = null;
-    const messages = await readMessages();
-    await downloadJsonFile(messages);
-  }, DEBOUNCE_MS);
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -69,7 +75,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
       messages.push(msg.payload);
       await writeMessages(messages);
-      scheduleDownloadFromStorage();
       sendResponse({ ok: true, count: messages.length });
     })().catch((e) => {
       console.error('[WA Extractor background] WA_MESSAGE error:', e);
@@ -81,7 +86,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === 'WA_EXPORT') {
     (async () => {
       const messages = await readMessages();
-      await downloadJsonFile(messages);
+      const json = JSON.stringify(messages, null, 2);
+      if (await tryWriteViaLocalRelay(json)) {
+        log('Saved', messages.length, 'message(s) via local relay → repo Scraping Tests/whatsapp-messages.json');
+      } else {
+        await downloadJsonFile(messages);
+      }
       sendResponse({ ok: true, count: messages.length });
     })().catch((e) => {
       console.error('[WA Extractor background] WA_EXPORT error:', e);
@@ -90,7 +100,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
-  if (msg?.type === 'WA_CLEAR_STORAGE') {
+  if (msg?.type === 'WA_CLEAR_STORAGE' || msg?.type === 'WA_SESSION_RESET') {
     (async () => {
       await chrome.storage.local.remove(STORAGE_KEY);
       sendResponse({ ok: true });

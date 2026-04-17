@@ -2,8 +2,8 @@
  * WhatsApp Web — real-time message capture (content script)
  *
  * Purpose: Observe the DOM for new chat rows, extract plain text and metadata,
- * keep an in-memory log, notify the background script to persist + download JSON,
- * and allow manual export for research.
+ * keep an in-memory log for the current chat session, notify the background to persist
+ * (no auto-download), and download JSON only when you click Export.
  *
  * Limitations: WhatsApp may change markup without notice. This script prefers
  * structural selectors (role, copyable-text) over obfuscated class names.
@@ -14,9 +14,20 @@
 (function () {
   'use strict';
 
-  // --- Storage: in-memory log + dedupe of DOM nodes we already recorded ---
+  // --- Storage: current chat session only + dedupe of DOM rows already handled ---
   const collectedMessages = [];
-  const processedRowNodes = new WeakSet();
+  let processedRowNodes = new WeakSet();
+
+  /** While the open chat’s history is still mounting, mark rows as seen without recording. */
+  let ignoreMutationsUntil = 0;
+  const POST_CHAT_SWITCH_MUTE_MS = 450;
+
+  let lastChatFingerprint;
+
+  /** Wall-clock moment when this chat session started (used to drop older thread messages). */
+  let sessionStartMs = 0;
+  /** Allow WhatsApp display time vs detection delay (ms). */
+  const SESSION_START_SLACK_MS = 8000;
 
   /** Verbose logs for development (timestamps, full payload). */
   const DEBUG = false;
@@ -47,6 +58,63 @@
     }
   }
 
+  function notifySessionReset() {
+    try {
+      chrome.runtime.sendMessage({ type: 'WA_SESSION_RESET' }, () => {
+        const err = chrome.runtime.lastError;
+        if (err && !err.message?.includes('Extension context invalidated')) {
+          console.warn('[WA Extractor] session reset failed:', err.message);
+        }
+      });
+    } catch (e) {
+      if (!String(e).includes('Extension context invalidated')) {
+        console.warn('[WA Extractor] notifySessionReset failed:', e);
+      }
+    }
+  }
+
+  /**
+   * Best-effort id for the open conversation (sidebar selection or header title).
+   */
+  function getChatFingerprint() {
+    const sel = document.querySelector('#pane-side [aria-selected="true"][data-id]');
+    if (sel) return sel.getAttribute('data-id') || '';
+    const main = document.getElementById('main');
+    if (!main) return '';
+    const header = main.querySelector('[data-testid="conversation-info-header"]');
+    const titleSpan = header?.querySelector('span[dir="auto"]');
+    const t = titleSpan?.textContent?.trim();
+    if (t) return `title:${t}`;
+    return '';
+  }
+
+  function markAllExistingMessageRowsSeen() {
+    const panel =
+      document.getElementById('main') ||
+      document.querySelector('[data-testid*="conversation-panel"]') ||
+      document.body;
+    findMessageRows(panel).forEach((row) => processedRowNodes.add(row));
+  }
+
+  function resetChatSession() {
+    sessionStartMs = Date.now();
+    collectedMessages.length = 0;
+    processedRowNodes = new WeakSet();
+    ignoreMutationsUntil = Date.now() + POST_CHAT_SWITCH_MUTE_MS;
+    dbg('Chat session reset');
+    notifySessionReset();
+    // Catch history that paints across several frames (without recording it as new traffic).
+    requestAnimationFrame(() => markAllExistingMessageRowsSeen());
+    [300, 600, 1200].forEach((ms) => setTimeout(() => markAllExistingMessageRowsSeen(), ms));
+  }
+
+  function pollChatChange() {
+    const fp = getChatFingerprint();
+    if (fp === lastChatFingerprint) return;
+    lastChatFingerprint = fp;
+    resetChatSession();
+  }
+
   function requestBackgroundExport() {
     return new Promise((resolve) => {
       try {
@@ -73,27 +141,67 @@
     });
   }
 
+  /** Spans that are not nested inside another copyable/selectable span (avoids double-walking). */
+  function topLevelSelectableSpans(row) {
+    const spans = Array.from(row.querySelectorAll('span.copyable-text, span.selectable-text'));
+    return spans.filter((s) => !spans.some((o) => o !== s && o.contains(s)));
+  }
+
   /**
-   * Concatenate visible text from message body spans (WhatsApp nests formatting spans).
+   * Depth-first text in DOM order: preserves Unicode emoji in text nodes and inserts
+   * `img` alt / title / aria-label (WhatsApp often renders emoji as inline images).
+   */
+  function collectTextFromNode(node, out) {
+    if (!node) return;
+    if (node.nodeType === Node.TEXT_NODE) {
+      out.push(node.textContent ?? '');
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = /** @type {Element} */ (node);
+    if (el.tagName === 'SCRIPT' || el.tagName === 'STYLE') return;
+    if (el.getAttribute('aria-hidden') === 'true') return;
+
+    if (el.tagName === 'IMG') {
+      const alt = el.getAttribute('alt') || '';
+      const title = el.getAttribute('title') || '';
+      const aria = el.getAttribute('aria-label') || '';
+      const piece = alt || title || aria;
+      if (piece) out.push(piece);
+      return;
+    }
+
+    const plain = el.getAttribute('data-plain-text');
+    if (plain != null && plain !== '' && el.childNodes.length === 0) {
+      out.push(plain);
+      return;
+    }
+
+    for (let i = 0; i < el.childNodes.length; i++) {
+      collectTextFromNode(el.childNodes[i], out);
+    }
+  }
+
+  /**
+   * Concatenate message text from body spans (DOM order; emoji as characters and/or img alt).
    */
   function extractTextFromRow(row) {
-    const spans = row.querySelectorAll('span.copyable-text, span.selectable-text');
+    const spans = topLevelSelectableSpans(row);
     if (!spans.length) return '';
 
     const parts = [];
     const seen = new Set();
     spans.forEach((span) => {
-      const text = span.innerText != null ? span.innerText.trim() : '';
+      const pieces = [];
+      collectTextFromNode(span, pieces);
+      const text = pieces.join('').replace(/\s+/g, ' ').trim();
       if (!text) return;
-      // Avoid duplicating when nested spans repeat the same string
       if (seen.has(text)) return;
       seen.add(text);
       parts.push(text);
     });
 
-    // In group chats, first block is sometimes the sender name — still include full row text once
     if (parts.length === 0) return '';
-    // Join with space; single bubble usually yields one logical string after de-dup
     return parts.join(' ').replace(/\s+/g, ' ').trim();
   }
 
@@ -127,8 +235,74 @@
   }
 
   /**
-   * Try to read WhatsApp's message id from an ancestor (helps debugging; optional).
+   * Parse WhatsApp’s local time into epoch ms (best-effort). Returns null if unknown.
+   * Used to ignore history/scroll-loaded bubbles that mount after you open the chat.
    */
+  function parseFlexibleLocalTimeMs(s) {
+    if (!s || typeof s !== 'string') return null;
+    const trimmed = s.trim();
+    const direct = Date.parse(trimmed);
+    if (!Number.isNaN(direct)) return direct;
+
+    // Time only (sometimes today): "1:21 AM"
+    const timeOnly = trimmed.match(/^(\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M)$/i);
+    if (timeOnly) {
+      const d = new Date();
+      const combined = Date.parse(`${d.toDateString()} ${timeOnly[1]}`);
+      if (!Number.isNaN(combined)) return combined;
+    }
+
+    // Common bracket: "1:21 AM, 4/15/2026"
+    const m = trimmed.match(
+      /^(\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M),\s*(\d{1,2})\/(\d{1,2})\/(\d{4})$/i
+    );
+    if (m) {
+      const d = new Date(`${m[2]}/${m[3]}/${m[4]} ${m[1]}`);
+      if (!Number.isNaN(d.getTime())) return d.getTime();
+    }
+
+    // "4/15/2026, 1:21 AM"
+    const m2 = trimmed.match(
+      /^(\d{1,2})\/(\d{1,2})\/(\d{4}),\s*(\d{1,2}:\d{2}(?::\d{2})?\s*[AP]M)$/i
+    );
+    if (m2) {
+      const d = new Date(`${m2[1]}/${m2[2]}/${m2[3]} ${m2[4]}`);
+      if (!Number.isNaN(d.getTime())) return d.getTime();
+    }
+
+    return null;
+  }
+
+  function parseMessageTimeMs(row) {
+    const pre = row.querySelector('[data-pre-plain-text]');
+    const raw = pre?.getAttribute('data-pre-plain-text');
+    if (raw) {
+      const bracket = raw.match(/^\[([^\]]+)\]/);
+      if (bracket) {
+        const inner = bracket[1].trim();
+        const t = parseFlexibleLocalTimeMs(inner);
+        if (t !== null) return t;
+      }
+    }
+
+    const meta = row.querySelector('[data-testid*="msg-meta"], [data-testid*="Meta"]');
+    const title = meta?.getAttribute('title');
+    if (title?.trim()) {
+      const t = parseFlexibleLocalTimeMs(title.trim());
+      if (t !== null) return t;
+    }
+
+    const titled = row.querySelector('span[title]');
+    const tAttr = titled?.getAttribute('title');
+    if (tAttr?.trim()) {
+      const t = parseFlexibleLocalTimeMs(tAttr.trim());
+      if (t !== null) return t;
+    }
+
+    return null;
+  }
+
+  /** WhatsApp message id from row or ancestor (optional, for dedupe / debug). */
   function findMessageDataId(row) {
     let el = row;
     for (let i = 0; i < 8 && el; i++) {
@@ -225,6 +399,20 @@
     const text = extractTextFromRow(row);
     if (!text) return;
 
+    if (!sessionStartMs) return;
+
+    const messageTimeMs = parseMessageTimeMs(row);
+    if (messageTimeMs === null) {
+      processedRowNodes.add(row);
+      dbg('Skip row: could not parse message time (strict session filter)');
+      return;
+    }
+    if (messageTimeMs < sessionStartMs - SESSION_START_SLACK_MS) {
+      processedRowNodes.add(row);
+      dbg('Skip row: message time before session start', { messageTimeMs, sessionStartMs });
+      return;
+    }
+
     processedRowNodes.add(row);
 
     const senderLabel = extractSenderLabel(row, text);
@@ -246,31 +434,26 @@
     notifyBackground(payload);
   }
 
-  function scanElementForMessages(root) {
-    findMessageRows(root).forEach(recordRowIfNew);
+  function markRowsSeenOnlyFromNode(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+    rowsFromAddedNode(/** @type {Element} */ (node)).forEach((row) => processedRowNodes.add(row));
+    findMessageRows(/** @type {Element} */ (node)).forEach((row) => processedRowNodes.add(row));
   }
 
   function scanAddedNode(node) {
     rowsFromAddedNode(node).forEach(recordRowIfNew);
   }
 
-  /**
-   * Scan the open conversation for rows already present (before observer attached).
-   */
-  function initialScan() {
-    const panel =
-      document.getElementById('main') ||
-      document.querySelector('[data-testid*="conversation-panel"]') ||
-      document.body;
-    scanElementForMessages(panel);
-  }
-
-  // --- MutationObserver: new nodes → find message rows ---
+  // --- MutationObserver: only *new* rows after chat is open (no initial history scan) ---
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type !== 'childList') continue;
       mutation.addedNodes.forEach((node) => {
         if (node.nodeType !== Node.ELEMENT_NODE) return;
+        if (Date.now() < ignoreMutationsUntil) {
+          markRowsSeenOnlyFromNode(/** @type {Element} */ (node));
+          return;
+        }
         scanAddedNode(/** @type {Element} */ (node));
       });
     }
@@ -279,9 +462,8 @@
   const observeTarget = document.getElementById('app') || document.body;
   observer.observe(observeTarget, { childList: true, subtree: true });
 
-  requestAnimationFrame(() => {
-    initialScan();
-  });
+  setInterval(pollChatChange, 400);
+  requestAnimationFrame(() => pollChatChange());
 
   // --- Export: ask background to download (same file as live updates) or fall back to page download ---
   async function exportMessagesToJsonFile() {
@@ -309,20 +491,7 @@
   window.__WA_EXPORT_MESSAGES__ = exportMessagesToJsonFile;
   window.__WA_COLLECTED_MESSAGES__ = collectedMessages;
 
-  // --- Keyboard: Ctrl+Shift+E (Windows/Linux) or Cmd+Shift+E (macOS) ---
-  window.addEventListener(
-    'keydown',
-    (e) => {
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
-        e.preventDefault();
-        exportMessagesToJsonFile();
-      }
-    },
-    true
-  );
-
-  // --- Minimal floating button ---
+  // --- Minimal floating button (only way to trigger download) ---
   function injectExportButton() {
     if (document.getElementById('wa-extractor-export-btn')) return;
 
