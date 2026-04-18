@@ -7,7 +7,7 @@ const STORAGE_KEY = 'waCollectedMessages';
 /**
  * Fallback when the local relay is not running: path under Chrome’s download directory only.
  */
-const DOWNLOAD_RELATIVE_PATH = 'Scraping Tests/whatsapp-messages.json';
+const DOWNLOAD_RELATIVE_PATH = 'Text-to-Speech-Enhancer/Scraping Tests/whatsapp-messages.json';
 
 /** If `node scripts/whatsapp-export-relay.mjs` is running, exports go to the repo’s Scraping Tests folder. */
 const LOCAL_EXPORT_RELAY_URL = 'http://127.0.0.1:17395/';
