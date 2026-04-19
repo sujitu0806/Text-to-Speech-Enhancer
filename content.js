@@ -62,7 +62,7 @@
     try {
       chrome.runtime.sendMessage({ type: 'WA_SESSION_RESET' }, () => {
         const err = chrome.runtime.lastError;
-        if (err && !err.message?.includes('Extension context invalidated')) {
+        if (err && !err.message?.includes('Extension ----context invalidated')) {
           console.warn('[WA Extractor] session reset failed:', err.message);
         }
       });

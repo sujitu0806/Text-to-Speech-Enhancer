@@ -1,8 +1,42 @@
 [
   {
+    "direction": "incoming",
+    "expanded_text": "laughing my ass off",
+    "senderLabel": "Tanvi Chordiya",
+    "text": "LMAO",
+    "timestamp": "1:16 AM, 4/19/2026",
+    "tone": "positive"
+  },
+  {
+    "direction": "incoming",
+    "expanded_text": "haha",
+    "senderLabel": "Tanvi Chordiya",
+    "text": "LOL",
+    "timestamp": "1:16 AM, 4/19/2026",
+    "tone": "positive"
+  },
+  {
     "direction": "outgoing",
+    "expanded_text": "be back later",
     "senderLabel": "Sujit Uppuluri",
-    "text": "hey.",
-    "timestamp": "5:14 PM, 4/18/2026"
+    "text": "bbl",
+    "timestamp": "1:16 AM, 4/19/2026",
+    "tone": "neutral"
+  },
+  {
+    "direction": "outgoing",
+    "expanded_text": "cutie",
+    "senderLabel": "Sujit Uppuluri",
+    "text": "qt",
+    "timestamp": "1:16 AM, 4/19/2026",
+    "tone": "positive"
+  },
+  {
+    "direction": "incoming",
+    "expanded_text": "yo did you see the chungus documentary",
+    "senderLabel": "Tanvi Chordiya",
+    "text": "yo did you see the chungus documentary",
+    "timestamp": "1:16 AM, 4/19/2026",
+    "tone": "unknown"
   }
 ]
