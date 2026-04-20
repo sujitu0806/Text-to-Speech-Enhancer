@@ -3,3 +3,4 @@
 # API key file — copy config.example.js to config.js and add your key there.
 # config.js is never committed.
 config.js
+.cursor/

@@ -33,7 +33,7 @@
   const DEBUG = false;
 
   /** Log one line per captured message — easy to verify in DevTools Console. */
-  const LOG_EACH_CAPTURE = true;
+  const LOG_EACH_CAPTURE = false;
 
   function dbg(...args) {
     if (DEBUG) console.log('[WA Extractor]', ...args);
@@ -139,6 +139,60 @@
         resolve({ ok: false, error });
       }
     });
+  }
+
+  function requestTtsAudio(message) {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'WA_TTS_GENERATE', payload: message }, (res) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            resolve({ ok: false, error: err.message });
+            return;
+          }
+          resolve(res || { ok: false, error: 'No response from background TTS' });
+        });
+      } catch (e) {
+        resolve({ ok: false, error: String(e) });
+      }
+    });
+  }
+
+  function playAudioBase64(audioBase64, mimeType) {
+    return new Promise((resolve, reject) => {
+      try {
+        const src = `data:${mimeType || 'audio/mpeg'};base64,${audioBase64}`;
+        const audio = new Audio(src);
+        audio.addEventListener('ended', () => {
+          resolve();
+        });
+        audio.addEventListener('error', () => {
+          reject(new Error('Audio playback failed'));
+        });
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch((e) => reject(e));
+        }
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async function playAllMessages(messages) {
+    if (!Array.isArray(messages) || messages.length === 0) return;
+    for (const message of messages) {
+      try {
+        const tts = await requestTtsAudio(message);
+        if (!tts?.ok || !tts.audioBase64) {
+          console.warn('[WA Extractor] TTS skipped for message:', tts?.error || 'unknown');
+          continue;
+        }
+        await playAudioBase64(tts.audioBase64, tts.mimeType);
+      } catch (e) {
+        console.warn('[WA Extractor] TTS playback error:', e);
+      }
+    }
   }
 
   /** Spans that are not nested inside another copyable/selectable span (avoids double-walking). */
@@ -470,6 +524,7 @@
     const bg = await requestBackgroundExport();
     if (bg && bg.ok) {
       dbg('Exported via background', bg.count, 'messages');
+      await playAllMessages(Array.isArray(bg.messages) ? bg.messages : collectedMessages);
       return;
     }
     const json = JSON.stringify(collectedMessages, null, 2);
@@ -485,6 +540,7 @@
       console.warn('[WA Extractor] background export failed; saved page copy:', bg?.error || 'unknown');
     }
     dbg('Exported (fallback)', collectedMessages.length, 'messages');
+    await playAllMessages(collectedMessages);
   }
 
   // Expose for DevTools debugging

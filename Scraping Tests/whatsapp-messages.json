@@ -1,42 +1,26 @@
 [
   {
-    "direction": "incoming",
+    "direction": "outgoing",
     "expanded_text": "laughing my ass off",
-    "senderLabel": "Tanvi Chordiya",
-    "text": "LMAO",
-    "timestamp": "1:16 AM, 4/19/2026",
-    "tone": "positive"
-  },
-  {
-    "direction": "incoming",
-    "expanded_text": "haha",
-    "senderLabel": "Tanvi Chordiya",
-    "text": "LOL",
-    "timestamp": "1:16 AM, 4/19/2026",
+    "senderLabel": "Sujit Uppuluri",
+    "text": "lmao",
+    "timestamp": "5:02 PMmsg-time",
     "tone": "positive"
   },
   {
     "direction": "outgoing",
-    "expanded_text": "be back later",
+    "expanded_text": "what is up",
     "senderLabel": "Sujit Uppuluri",
-    "text": "bbl",
-    "timestamp": "1:16 AM, 4/19/2026",
+    "text": "sup",
+    "timestamp": "5:02 PMmsg-time",
     "tone": "neutral"
   },
   {
     "direction": "outgoing",
-    "expanded_text": "cutie",
+    "expanded_text": "what are you doing right now",
     "senderLabel": "Sujit Uppuluri",
-    "text": "qt",
-    "timestamp": "1:16 AM, 4/19/2026",
-    "tone": "positive"
-  },
-  {
-    "direction": "incoming",
-    "expanded_text": "yo did you see the chungus documentary",
-    "senderLabel": "Tanvi Chordiya",
-    "text": "yo did you see the chungus documentary",
-    "timestamp": "1:16 AM, 4/19/2026",
-    "tone": "unknown"
+    "text": "wyd rn",
+    "timestamp": "5:02 PMmsg-time",
+    "tone": "neutral"
   }
 ]
