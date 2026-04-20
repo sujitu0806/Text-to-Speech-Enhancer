@@ -1,26 +1,58 @@
 [
   {
     "direction": "outgoing",
-    "expanded_text": "laughing my ass off",
+    "expanded_text": "hi",
     "senderLabel": "Sujit Uppuluri",
-    "text": "lmao",
-    "timestamp": "5:02 PMmsg-time",
+    "text": "hi",
+    "timestamp": "5:36 PMmsg-time",
+    "tone": "neutral"
+  },
+  {
+    "direction": "outgoing",
+    "expanded_text": "What's up",
+    "senderLabel": "Sujit Uppuluri",
+    "text": "sup",
+    "timestamp": "5:36 PMmsg-time",
+    "tone": "neutral"
+  },
+  {
+    "direction": "outgoing",
+    "expanded_text": "testing",
+    "senderLabel": "Sujit Uppuluri",
+    "text": "testing",
+    "timestamp": "5:36 PMmsg-time",
+    "tone": "neutral"
+  },
+  {
+    "direction": "outgoing",
+    "expanded_text": "hello",
+    "senderLabel": "Sujit Uppuluri",
+    "text": "hello",
+    "timestamp": "5:36 PMmsg-time",
+    "tone": "neutral"
+  },
+  {
+    "direction": "incoming",
+    "expanded_text": "LALALALALALA",
+    "senderLabel": "Tanvi Chordiya",
+    "text": "LALALALALALA",
+    "timestamp": "5:36 PM",
     "tone": "positive"
   },
   {
-    "direction": "outgoing",
-    "expanded_text": "what is up",
-    "senderLabel": "Sujit Uppuluri",
-    "text": "sup",
-    "timestamp": "5:02 PMmsg-time",
+    "direction": "incoming",
+    "expanded_text": "Dude",
+    "senderLabel": "Tanvi Chordiya",
+    "text": "DAWG",
+    "timestamp": "5:37 PM",
     "tone": "neutral"
   },
   {
-    "direction": "outgoing",
-    "expanded_text": "what are you doing right now",
-    "senderLabel": "Sujit Uppuluri",
-    "text": "wyd rn",
-    "timestamp": "5:02 PMmsg-time",
-    "tone": "neutral"
+    "direction": "incoming",
+    "expanded_text": "ps ps ps ps ps",
+    "senderLabel": "Tanvi Chordiya",
+    "text": "pspspspsps",
+    "timestamp": "5:37 PM",
+    "tone": "positive"
   }
 ]

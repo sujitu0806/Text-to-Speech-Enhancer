@@ -17,6 +17,9 @@
   // --- Storage: current chat session only + dedupe of DOM rows already handled ---
   const collectedMessages = [];
   let processedRowNodes = new WeakSet();
+  let liveAudioEl = null;
+  let latestLiveRequestToken = 0;
+  let lastLiveIncomingKey = null;
 
   /** While the open chat’s history is still mounting, mark rows as seen without recording. */
   let ignoreMutationsUntil = 0;
@@ -56,6 +59,28 @@
         console.warn('[WA Extractor] notifyBackground failed:', e);
       }
     }
+  }
+
+  function liveMessageKey(payload) {
+    if (payload?.messageId) return `id:${payload.messageId}`;
+    return `h:${payload?.timestamp || ''}|${payload?.direction || ''}|${payload?.text || ''}`;
+  }
+
+  function requestLiveIncomingAudio(payload) {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'WA_LIVE_INCOMING', payload }, (res) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            resolve({ ok: false, error: err.message });
+            return;
+          }
+          resolve(res || { ok: false, error: 'No response from live incoming pipeline' });
+        });
+      } catch (e) {
+        resolve({ ok: false, error: String(e) });
+      }
+    });
   }
 
   function notifySessionReset() {
@@ -101,6 +126,15 @@
     collectedMessages.length = 0;
     processedRowNodes = new WeakSet();
     ignoreMutationsUntil = Date.now() + POST_CHAT_SWITCH_MUTE_MS;
+    latestLiveRequestToken += 1;
+    lastLiveIncomingKey = null;
+    if (liveAudioEl) {
+      try {
+        liveAudioEl.pause();
+        liveAudioEl.src = '';
+      } catch {}
+      liveAudioEl = null;
+    }
     dbg('Chat session reset');
     notifySessionReset();
     // Catch history that paints across several frames (without recording it as new traffic).
@@ -177,6 +211,49 @@
         reject(e);
       }
     });
+  }
+
+  function playLiveAudioBase64(audioBase64, mimeType) {
+    return new Promise((resolve, reject) => {
+      try {
+        if (liveAudioEl) {
+          try {
+            liveAudioEl.pause();
+            liveAudioEl.src = '';
+          } catch {}
+          liveAudioEl = null;
+        }
+        const src = `data:${mimeType || 'audio/mpeg'};base64,${audioBase64}`;
+        const audio = new Audio(src);
+        liveAudioEl = audio;
+        audio.addEventListener('ended', () => {
+          if (liveAudioEl === audio) liveAudioEl = null;
+          resolve();
+        });
+        audio.addEventListener('error', () => {
+          if (liveAudioEl === audio) liveAudioEl = null;
+          reject(new Error('Live audio playback failed'));
+        });
+        const p = audio.play();
+        if (p && typeof p.catch === 'function') p.catch((e) => reject(e));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  async function triggerIncomingReadout(payload) {
+    const key = liveMessageKey(payload);
+    if (lastLiveIncomingKey === key) return;
+    lastLiveIncomingKey = key;
+    const token = ++latestLiveRequestToken;
+    const live = await requestLiveIncomingAudio(payload);
+    if (token !== latestLiveRequestToken) return;
+    if (!live?.ok || !live.audioBase64) {
+      console.warn('[WA Extractor] live incoming readout skipped:', live?.error || 'unknown');
+      return;
+    }
+    await playLiveAudioBase64(live.audioBase64, live.mimeType);
   }
 
   async function playAllMessages(messages) {
@@ -485,7 +562,13 @@
       console.log('[WA Extractor] captured:', payload.text?.slice(0, 120), payload);
     }
     dbg('Captured:', payload);
-    notifyBackground(payload);
+    if (payload.direction === 'incoming') {
+      triggerIncomingReadout(payload).catch((e) => {
+        console.warn('[WA Extractor] live incoming readout error:', e);
+      });
+    } else {
+      notifyBackground(payload);
+    }
   }
 
   function markRowsSeenOnlyFromNode(node) {
