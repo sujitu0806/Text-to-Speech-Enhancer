@@ -562,13 +562,9 @@
       console.log('[WA Extractor] captured:', payload.text?.slice(0, 120), payload);
     }
     dbg('Captured:', payload);
-    if (payload.direction === 'incoming') {
-      triggerIncomingReadout(payload).catch((e) => {
-        console.warn('[WA Extractor] live incoming readout error:', e);
-      });
-    } else {
-      notifyBackground(payload);
-    }
+    triggerIncomingReadout(payload).catch((e) => {
+      console.warn('[WA Extractor] live readout error:', e);
+    });
   }
 
   function markRowsSeenOnlyFromNode(node) {
