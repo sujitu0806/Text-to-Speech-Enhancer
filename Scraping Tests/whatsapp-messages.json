@@ -2,19 +2,28 @@
   {
     "confidence": 95,
     "direction": "outgoing",
-    "expanded_text": "how come the others did not come through",
+    "expanded_text": "laughing my ass off",
     "senderLabel": "Sujit Uppuluri",
-    "text": "how come the others didn't come through",
-    "timestamp": "9:59 PMmsg-time",
-    "tone": "neutral"
+    "text": "lmao",
+    "timestamp": "10:46 PM",
+    "tone": "positive"
   },
   {
-    "confidence": 98,
+    "confidence": 90,
     "direction": "outgoing",
-    "expanded_text": "I would agree with you, but then we would both be wrong",
+    "expanded_text": "laughing out loud",
     "senderLabel": "Sujit Uppuluri",
-    "text": "I'd agree with you, but then we'd both be wrong",
-    "timestamp": "10:00 PMmsg-time",
-    "tone": "sarcastic"
+    "text": "lol",
+    "timestamp": "10:46 PM",
+    "tone": "positive"
+  },
+  {
+    "confidence": 60,
+    "direction": "outgoing",
+    "expanded_text": "sup",
+    "senderLabel": "Sujit Uppuluri",
+    "text": "sup",
+    "timestamp": "10:46 PM",
+    "tone": "neutral"
   }
 ]

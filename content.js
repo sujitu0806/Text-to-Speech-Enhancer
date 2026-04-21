@@ -18,8 +18,10 @@
   const collectedMessages = [];
   let processedRowNodes = new WeakSet();
   let liveAudioEl = null;
-  let latestLiveRequestToken = 0;
-  let lastLiveIncomingKey = null;
+  let liveReadoutQueue = [];
+  let isLiveReadoutRunning = false;
+  let recentQueuedLiveKeys = new Map();
+  let queuedOrSpokenLiveKeys = new Set();
   let insightPanelEls = null;
   let insightPanelVisible = true;
 
@@ -28,11 +30,14 @@
   const POST_CHAT_SWITCH_MUTE_MS = 450;
 
   let lastChatFingerprint;
+  let lastStableChatFingerprint = null;
 
   /** Wall-clock moment when this chat session started (used to drop older thread messages). */
   let sessionStartMs = 0;
   /** Allow WhatsApp display time vs detection delay (ms). */
-  const SESSION_START_SLACK_MS = 8000;
+  // WhatsApp visible times are often minute-precision; use wider grace to avoid
+  // dropping freshly-sent messages at minute boundaries right after session start.
+  const SESSION_START_SLACK_MS = 90000;
 
   /** Verbose logs for development (timestamps, full payload). */
   const DEBUG = false;
@@ -176,8 +181,9 @@
     collectedMessages.length = 0;
     processedRowNodes = new WeakSet();
     ignoreMutationsUntil = Date.now() + POST_CHAT_SWITCH_MUTE_MS;
-    latestLiveRequestToken += 1;
-    lastLiveIncomingKey = null;
+    liveReadoutQueue = [];
+    isLiveReadoutRunning = false;
+    queuedOrSpokenLiveKeys = new Set();
     if (liveAudioEl) {
       try {
         liveAudioEl.pause();
@@ -195,7 +201,9 @@
 
   function pollChatChange() {
     const fp = getChatFingerprint();
-    if (fp === lastChatFingerprint) return;
+    if (!fp) return;
+    if (fp === lastStableChatFingerprint) return;
+    lastStableChatFingerprint = fp;
     lastChatFingerprint = fp;
     resetChatSession();
     positionInsightPanel();
@@ -295,23 +303,50 @@
     });
   }
 
-  async function triggerIncomingReadout(payload) {
+  async function processLiveReadoutQueue() {
+    if (isLiveReadoutRunning) return;
+    isLiveReadoutRunning = true;
+    while (liveReadoutQueue.length > 0) {
+      const payload = liveReadoutQueue.shift();
+      const live = await requestLiveIncomingAudio(payload);
+      if (!live?.ok || !live.audioBase64) {
+        queuedOrSpokenLiveKeys.delete(liveMessageKey(payload));
+        console.warn('[WA Extractor] live incoming readout skipped:', live?.error || 'unknown');
+        continue;
+      }
+      updateInsightPanel({
+        ...payload,
+        expanded_text: live.spokenText || payload?.expanded_text || payload?.text || '',
+        confidence: live.confidence,
+        tone: live.tone || payload?.tone || 'unknown',
+      });
+      try {
+        await playLiveAudioBase64(live.audioBase64, live.mimeType);
+      } catch (e) {
+        console.warn('[WA Extractor] live audio playback error:', e);
+      }
+    }
+    isLiveReadoutRunning = false;
+  }
+
+  function triggerIncomingReadout(payload) {
     const key = liveMessageKey(payload);
-    if (lastLiveIncomingKey === key) return;
-    lastLiveIncomingKey = key;
-    const token = ++latestLiveRequestToken;
-    const live = await requestLiveIncomingAudio(payload);
-    if (token !== latestLiveRequestToken) return;
-    if (!live?.ok || !live.audioBase64) {
-      console.warn('[WA Extractor] live incoming readout skipped:', live?.error || 'unknown');
+    if (queuedOrSpokenLiveKeys.has(key)) {
       return;
     }
-    updateInsightPanel({
-      ...payload,
-      expanded_text: live.spokenText || payload?.expanded_text || payload?.text || '',
-      confidence: live.confidence,
+    const now = Date.now();
+    const lastQueuedAt = recentQueuedLiveKeys.get(key) || 0;
+    // Ignore near-immediate duplicate DOM re-renders of the same message row.
+    if (now - lastQueuedAt < 1500) {
+      return;
+    }
+    recentQueuedLiveKeys.set(key, now);
+    queuedOrSpokenLiveKeys.add(key);
+    liveReadoutQueue.push(payload);
+    processLiveReadoutQueue().catch((e) => {
+      console.warn('[WA Extractor] live readout queue error:', e);
+      isLiveReadoutRunning = false;
     });
-    await playLiveAudioBase64(live.audioBase64, live.mimeType);
   }
 
   async function playAllMessages(messages) {
@@ -428,6 +463,15 @@
     return first;
   }
 
+  function normalizeTimestampLabel(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    return text
+      .replace(/msg-(?:time|dblcheck)/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   /**
    * Parse WhatsApp’s local time into epoch ms (best-effort). Returns null if unknown.
    * Used to ignore history/scroll-loaded bubbles that mount after you open the chat.
@@ -514,20 +558,20 @@
     const meta = row.querySelector('[data-testid*="msg-meta"], [data-testid*="Meta"]');
     if (meta) {
       const title = meta.getAttribute('title');
-      if (title && title.trim()) return title.trim();
-      const txt = meta.textContent?.trim();
+      if (title && title.trim()) return normalizeTimestampLabel(title);
+      const txt = normalizeTimestampLabel(meta.textContent);
       if (txt) return txt;
     }
 
     const titled = row.querySelector('span[title]');
     const tAttr = titled?.getAttribute('title');
-    if (tAttr && /\d{1,2}[.:]\d{2}/.test(tAttr)) return tAttr.trim();
+    if (tAttr && /\d{1,2}[.:]\d{2}/.test(tAttr)) return normalizeTimestampLabel(tAttr);
 
     const pre = row.querySelector('[data-pre-plain-text]');
     const raw = pre?.getAttribute('data-pre-plain-text');
     if (raw) {
       const bracket = raw.match(/^\[([^\]]+)\]/);
-      if (bracket) return bracket[1].trim();
+      if (bracket) return normalizeTimestampLabel(bracket[1]);
     }
 
     return new Date().toISOString();
@@ -625,9 +669,7 @@
       console.log('[WA Extractor] captured:', payload.text?.slice(0, 120), payload);
     }
     dbg('Captured:', payload);
-    triggerIncomingReadout(payload).catch((e) => {
-      console.warn('[WA Extractor] live readout error:', e);
-    });
+    triggerIncomingReadout(payload);
   }
 
   function markRowsSeenOnlyFromNode(node) {
