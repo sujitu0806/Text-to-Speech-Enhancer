@@ -1,58 +1,20 @@
 [
   {
+    "confidence": 95,
     "direction": "outgoing",
-    "expanded_text": "hi",
+    "expanded_text": "how come the others did not come through",
     "senderLabel": "Sujit Uppuluri",
-    "text": "hi",
-    "timestamp": "5:36 PMmsg-time",
+    "text": "how come the others didn't come through",
+    "timestamp": "9:59 PMmsg-time",
     "tone": "neutral"
   },
   {
+    "confidence": 98,
     "direction": "outgoing",
-    "expanded_text": "What's up",
+    "expanded_text": "I would agree with you, but then we would both be wrong",
     "senderLabel": "Sujit Uppuluri",
-    "text": "sup",
-    "timestamp": "5:36 PMmsg-time",
-    "tone": "neutral"
-  },
-  {
-    "direction": "outgoing",
-    "expanded_text": "testing",
-    "senderLabel": "Sujit Uppuluri",
-    "text": "testing",
-    "timestamp": "5:36 PMmsg-time",
-    "tone": "neutral"
-  },
-  {
-    "direction": "outgoing",
-    "expanded_text": "hello",
-    "senderLabel": "Sujit Uppuluri",
-    "text": "hello",
-    "timestamp": "5:36 PMmsg-time",
-    "tone": "neutral"
-  },
-  {
-    "direction": "incoming",
-    "expanded_text": "LALALALALALA",
-    "senderLabel": "Tanvi Chordiya",
-    "text": "LALALALALALA",
-    "timestamp": "5:36 PM",
-    "tone": "positive"
-  },
-  {
-    "direction": "incoming",
-    "expanded_text": "Dude",
-    "senderLabel": "Tanvi Chordiya",
-    "text": "DAWG",
-    "timestamp": "5:37 PM",
-    "tone": "neutral"
-  },
-  {
-    "direction": "incoming",
-    "expanded_text": "ps ps ps ps ps",
-    "senderLabel": "Tanvi Chordiya",
-    "text": "pspspspsps",
-    "timestamp": "5:37 PM",
-    "tone": "positive"
+    "text": "I'd agree with you, but then we'd both be wrong",
+    "timestamp": "10:00 PMmsg-time",
+    "tone": "sarcastic"
   }
 ]

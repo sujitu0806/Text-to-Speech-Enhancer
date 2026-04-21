@@ -20,6 +20,8 @@
   let liveAudioEl = null;
   let latestLiveRequestToken = 0;
   let lastLiveIncomingKey = null;
+  let insightPanelEls = null;
+  let insightPanelVisible = true;
 
   /** While the open chat’s history is still mounting, mark rows as seen without recording. */
   let ignoreMutationsUntil = 0;
@@ -64,6 +66,54 @@
   function liveMessageKey(payload) {
     if (payload?.messageId) return `id:${payload.messageId}`;
     return `h:${payload?.timestamp || ''}|${payload?.direction || ''}|${payload?.text || ''}`;
+  }
+
+  function formatConfidence(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 'N/A';
+    const clamped = Math.max(0, Math.min(100, Math.round(n)));
+    return `${clamped}%`;
+  }
+
+  function updateInsightPanel(message) {
+    if (!insightPanelEls) return;
+    insightPanelEls.originalValue.textContent = (message?.text || '').trim() || '(empty)';
+    insightPanelEls.convertedValue.textContent = (message?.expanded_text || message?.text || '').trim() || '(empty)';
+    insightPanelEls.toneValue.textContent = String(message?.tone || 'unknown');
+    insightPanelEls.confidenceValue.textContent = formatConfidence(message?.confidence);
+  }
+
+  function resetInsightPanelMessage() {
+    if (!insightPanelEls) return;
+    insightPanelEls.originalValue.textContent = '-';
+    insightPanelEls.convertedValue.textContent = '-';
+    insightPanelEls.toneValue.textContent = '-';
+    insightPanelEls.confidenceValue.textContent = '-';
+  }
+
+  function setInsightPanelVisible(visible) {
+    insightPanelVisible = !!visible;
+    if (!insightPanelEls) return;
+    const hasActiveChat = Boolean(getChatFingerprint());
+    insightPanelEls.container.style.display = insightPanelVisible && hasActiveChat ? 'block' : 'none';
+    insightPanelEls.showBtn.style.display = !insightPanelVisible && hasActiveChat ? 'block' : 'none';
+  }
+
+  function positionInsightPanel() {
+    if (!insightPanelEls) return;
+    const main = document.getElementById('main');
+    if (!main) return;
+    const mainRect = main.getBoundingClientRect();
+    const header =
+      main.querySelector('[data-testid="conversation-info-header"]') || main.querySelector('header');
+    if (!header) return;
+    const rect = header.getBoundingClientRect();
+    const top = Math.round(rect.bottom + 8);
+    const left = Math.round(mainRect.left + 6);
+    insightPanelEls.container.style.top = `${top}px`;
+    insightPanelEls.container.style.left = `${left}px`;
+    insightPanelEls.showBtn.style.top = `${top}px`;
+    insightPanelEls.showBtn.style.left = `${left}px`;
   }
 
   function requestLiveIncomingAudio(payload) {
@@ -135,6 +185,7 @@
       } catch {}
       liveAudioEl = null;
     }
+    resetInsightPanelMessage();
     dbg('Chat session reset');
     notifySessionReset();
     // Catch history that paints across several frames (without recording it as new traffic).
@@ -147,6 +198,8 @@
     if (fp === lastChatFingerprint) return;
     lastChatFingerprint = fp;
     resetChatSession();
+    positionInsightPanel();
+    setInsightPanelVisible(insightPanelVisible);
   }
 
   function requestBackgroundExport() {
@@ -253,6 +306,11 @@
       console.warn('[WA Extractor] live incoming readout skipped:', live?.error || 'unknown');
       return;
     }
+    updateInsightPanel({
+      ...payload,
+      expanded_text: live.spokenText || payload?.expanded_text || payload?.text || '',
+      confidence: live.confidence,
+    });
     await playLiveAudioBase64(live.audioBase64, live.mimeType);
   }
 
@@ -265,6 +323,11 @@
           console.warn('[WA Extractor] TTS skipped for message:', tts?.error || 'unknown');
           continue;
         }
+        updateInsightPanel({
+          ...message,
+          expanded_text: tts.spokenText || message?.expanded_text || message?.text || '',
+          confidence: tts?.confidence ?? message?.confidence,
+        });
         await playAudioBase64(tts.audioBase64, tts.mimeType);
       } catch (e) {
         console.warn('[WA Extractor] TTS playback error:', e);
@@ -626,9 +689,31 @@
   window.__WA_EXPORT_MESSAGES__ = exportMessagesToJsonFile;
   window.__WA_COLLECTED_MESSAGES__ = collectedMessages;
 
-  // --- Minimal floating button (only way to trigger download) ---
-  function injectExportButton() {
-    if (document.getElementById('wa-extractor-export-btn')) return;
+  function injectInsightPanel() {
+    if (document.getElementById('wa-extractor-insight-panel')) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'wa-extractor-insight-panel';
+    panel.style.cssText = [
+      'position:fixed',
+      'top:120px',
+      'left:360px',
+      'z-index:2147483646',
+      'width:280px',
+      'padding:10px',
+      'font:12px/1.35 sans-serif',
+      'background:rgba(15,23,42,0.82)',
+      'color:#e5e7eb',
+      'border:1px solid rgba(148,163,184,0.25)',
+      'border-radius:8px',
+      'box-shadow:0 2px 8px rgba(0,0,0,.2)',
+      'backdrop-filter:blur(2px)',
+      'display:block',
+      'pointer-events:auto',
+    ].join(';');
+
+    const controls = document.createElement('div');
+    controls.style.cssText = 'display:flex;gap:6px;margin:0 0 8px 0;';
 
     const btn = document.createElement('button');
     btn.id = 'wa-extractor-export-btn';
@@ -636,27 +721,119 @@
     btn.textContent = 'Export JSON';
     btn.setAttribute('aria-label', 'Export captured WhatsApp messages as JSON');
     btn.style.cssText = [
-      'position:fixed',
-      'bottom:16px',
-      'right:16px',
-      'z-index:2147483646',
-      'padding:8px 12px',
-      'font:14px sans-serif',
+      'display:block',
+      'flex:1 1 auto',
+      'padding:6px 8px',
+      'font:12px sans-serif',
       'cursor:pointer',
       'background:#128c7e',
       'color:#fff',
       'border:none',
       'border-radius:6px',
-      'box-shadow:0 2px 8px rgba(0,0,0,.2)',
     ].join(';');
-
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       exportMessagesToJsonFile();
     });
 
-    document.documentElement.appendChild(btn);
+    const hideBtn = document.createElement('button');
+    hideBtn.type = 'button';
+    hideBtn.textContent = 'Hide';
+    hideBtn.setAttribute('aria-label', 'Hide insight panel');
+    hideBtn.style.cssText = [
+      'display:block',
+      'padding:6px 8px',
+      'font:12px sans-serif',
+      'cursor:pointer',
+      'background:rgba(100,116,139,0.35)',
+      'color:#e5e7eb',
+      'border:1px solid rgba(148,163,184,0.35)',
+      'border-radius:6px',
+    ].join(';');
+    hideBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setInsightPanelVisible(false);
+    });
+
+    const showBtn = document.createElement('button');
+    showBtn.id = 'wa-extractor-insight-show-btn';
+    showBtn.type = 'button';
+    showBtn.textContent = 'Show Insight';
+    showBtn.setAttribute('aria-label', 'Show insight panel');
+    showBtn.style.cssText = [
+      'position:fixed',
+      'top:120px',
+      'left:360px',
+      'z-index:2147483646',
+      'padding:6px 10px',
+      'font:12px sans-serif',
+      'cursor:pointer',
+      'background:rgba(15,23,42,0.82)',
+      'color:#e5e7eb',
+      'border:1px solid rgba(148,163,184,0.35)',
+      'border-radius:6px',
+      'box-shadow:0 2px 8px rgba(0,0,0,.2)',
+      'display:none',
+    ].join(';');
+    showBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setInsightPanelVisible(true);
+    });
+
+    const originalLabel = document.createElement('div');
+    originalLabel.textContent = 'Original';
+    originalLabel.style.cssText = 'opacity:.75;margin:0 0 2px 0;';
+    const originalValue = document.createElement('div');
+    originalValue.textContent = '-';
+    originalValue.style.cssText = 'margin:0 0 8px 0;white-space:pre-wrap;word-break:break-word;';
+
+    const convertedLabel = document.createElement('div');
+    convertedLabel.textContent = 'Converted';
+    convertedLabel.style.cssText = 'opacity:.75;margin:0 0 2px 0;';
+    const convertedValue = document.createElement('div');
+    convertedValue.textContent = '-';
+    convertedValue.style.cssText = 'margin:0 0 8px 0;white-space:pre-wrap;word-break:break-word;';
+
+    const confidenceLabel = document.createElement('div');
+    confidenceLabel.textContent = 'Confidence';
+    confidenceLabel.style.cssText = 'opacity:.75;margin:0 0 2px 0;';
+    const confidenceValue = document.createElement('div');
+    confidenceValue.textContent = '-';
+    confidenceValue.style.cssText = 'font-weight:600;';
+
+    const toneLabel = document.createElement('div');
+    toneLabel.textContent = 'Tone';
+    toneLabel.style.cssText = 'opacity:.75;margin:0 0 2px 0;';
+    const toneValue = document.createElement('div');
+    toneValue.textContent = '-';
+    toneValue.style.cssText = 'margin:0 0 8px 0;font-weight:600;';
+
+    controls.appendChild(btn);
+    controls.appendChild(hideBtn);
+    panel.appendChild(controls);
+    panel.appendChild(originalLabel);
+    panel.appendChild(originalValue);
+    panel.appendChild(convertedLabel);
+    panel.appendChild(convertedValue);
+    panel.appendChild(toneLabel);
+    panel.appendChild(toneValue);
+    panel.appendChild(confidenceLabel);
+    panel.appendChild(confidenceValue);
+    document.documentElement.appendChild(panel);
+    document.documentElement.appendChild(showBtn);
+
+    insightPanelEls = {
+      container: panel,
+      originalValue,
+      convertedValue,
+      toneValue,
+      confidenceValue,
+      showBtn,
+    };
+    setInsightPanelVisible(true);
+    positionInsightPanel();
+    window.addEventListener('resize', positionInsightPanel);
   }
 
-  injectExportButton();
+  injectInsightPanel();
 })();
