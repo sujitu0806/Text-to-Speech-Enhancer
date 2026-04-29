@@ -85,6 +85,7 @@
     insightPanelEls.originalValue.textContent = (message?.text || '').trim() || '(empty)';
     insightPanelEls.convertedValue.textContent = (message?.expanded_text || message?.text || '').trim() || '(empty)';
     insightPanelEls.toneValue.textContent = String(message?.tone || 'unknown');
+    insightPanelEls.reasoningValue.textContent = (message?.tone_reasoning || '').trim() || '-';
     insightPanelEls.confidenceValue.textContent = formatConfidence(message?.confidence);
   }
 
@@ -93,6 +94,7 @@
     insightPanelEls.originalValue.textContent = '-';
     insightPanelEls.convertedValue.textContent = '-';
     insightPanelEls.toneValue.textContent = '-';
+    insightPanelEls.reasoningValue.textContent = '-';
     insightPanelEls.confidenceValue.textContent = '-';
   }
 
@@ -319,6 +321,7 @@
         expanded_text: live.spokenText || payload?.expanded_text || payload?.text || '',
         confidence: live.confidence,
         tone: live.tone || payload?.tone || 'unknown',
+        tone_reasoning: live.tone_reasoning || payload?.tone_reasoning || '',
       });
       try {
         await playLiveAudioBase64(live.audioBase64, live.mimeType);
@@ -362,6 +365,7 @@
           ...message,
           expanded_text: tts.spokenText || message?.expanded_text || message?.text || '',
           confidence: tts?.confidence ?? message?.confidence,
+          tone_reasoning: tts?.tone_reasoning || message?.tone_reasoning || '',
         });
         await playAudioBase64(tts.audioBase64, tts.mimeType);
       } catch (e) {
@@ -850,6 +854,13 @@
     toneValue.textContent = '-';
     toneValue.style.cssText = 'margin:0 0 8px 0;font-weight:600;';
 
+    const reasoningLabel = document.createElement('div');
+    reasoningLabel.textContent = 'Tone Reason';
+    reasoningLabel.style.cssText = 'opacity:.75;margin:0 0 2px 0;';
+    const reasoningValue = document.createElement('div');
+    reasoningValue.textContent = '-';
+    reasoningValue.style.cssText = 'margin:0 0 8px 0;white-space:pre-wrap;word-break:break-word;';
+
     controls.appendChild(btn);
     controls.appendChild(hideBtn);
     panel.appendChild(controls);
@@ -859,6 +870,8 @@
     panel.appendChild(convertedValue);
     panel.appendChild(toneLabel);
     panel.appendChild(toneValue);
+    panel.appendChild(reasoningLabel);
+    panel.appendChild(reasoningValue);
     panel.appendChild(confidenceLabel);
     panel.appendChild(confidenceValue);
     document.documentElement.appendChild(panel);
@@ -869,6 +882,7 @@
       originalValue,
       convertedValue,
       toneValue,
+      reasoningValue,
       confidenceValue,
       showBtn,
     };
